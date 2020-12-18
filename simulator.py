@@ -4,7 +4,6 @@ import random
 import numpy as np
 import pandas as pd
 
-import cv2
 import matplotlib.pyplot as plt
 
 import pickle
@@ -51,8 +50,10 @@ class World:
 
         self.order_time_points = np.floor(self.temporal_distribution.sample(self.total_order_num)) % (24*60)
 
-    def initialize_simulation(self, operators):
-        self.operators = operators
+    def initialize_simulation(self, gene_pool):
+
+        for i in range(len(self.operators)):
+            self.operators[i].distribution = gene_pool[i]
 
         self.simulation_count = 0
 
@@ -64,8 +65,11 @@ class World:
 
         self.order_time_points = np.floor(self.temporal_distribution.sample(self.total_order_num)) % (24*60)
 
-    def get_individuals(self):
-        return self.operators
+    def get_gene_pool(self):
+        gene_pool = []
+        for operator in self.operators:
+            gene_pool.append(operator.distribution)
+        return gene_pool
 
     def take_a_step(self):
         current_time = (self.simulation_start + self.simulation_count) % (24*60)
