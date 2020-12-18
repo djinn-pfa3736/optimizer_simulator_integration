@@ -51,7 +51,7 @@ class Driver:
                 self.dest_coord = order.dest_coord
                 self.state = 1
                 return 0
-            elif state == 2:
+            elif self.state == 2:
                 return self.get_order_to_stock(order, current_time)
             else:
                 return -1

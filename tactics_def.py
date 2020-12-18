@@ -1,6 +1,8 @@
 import numpy as np
 import random
 
+import pdb
+
 def in_house_random(operator_id, whole_operators, order):
     # add ksakata
     drivers = whole_operators[operator_id].drivers
@@ -26,7 +28,8 @@ def in_house_random(operator_id, whole_operators, order):
 
 def totally_random(operator_id, whole_operators, order):
     # add ksakata
-    shuffled_idx_operator = random.sample(np.arange(len(drivers)), len(drivers))
+    # pdb.set_trace()
+    shuffled_idx_operator = random.sample(np.arange(len(whole_operators)).tolist(), len(whole_operators))
     for operator_idx in shuffled_idx_operator:
         drivers = whole_operators[operator_idx].drivers
         driver_states = [drivers[i].state for i in range(0, len(drivers))]
@@ -77,7 +80,7 @@ def in_house_nearest(operator_id, whole_operators, order):
 
 def totally_nearest(operator_id, whole_operators, order):
     # add ksakata
-    shop_position = order.shop_position
+    shop_position = order.shop_coord
     distances = []
     empty_idx_list = []
     operators_idx_list = []
@@ -103,15 +106,16 @@ def totally_nearest(operator_id, whole_operators, order):
         distances = distances + tmp
 
         operators_idx_list = operators_idx_list + [idx]*len(drivers)
-        drivers_idx_list = drivers_idx_list + range(len(drivers))
+        drivers_idx_list = drivers_idx_list + np.arange(len(drivers)).tolist()
 
     if np.sum(empty_idx_list) == 0:
         return -1, -1
     else:
         sorted_idx_list = np.argsort(distances)
-        for idx in sorted_idx_list:
-            if drivers_list[idx].state == 0:
-                return operators_idx_list[idx], drivers_idx_list[idx]
+        # pdb.set_trace()
+        for sorted_idx in sorted_idx_list:
+            if drivers_list[sorted_idx].state == 0:
+                return operators_idx_list[sorted_idx], drivers_idx_list[sorted_idx]
 
         return -1, -1
 
@@ -180,14 +184,14 @@ def totally_home_nearest(operator_id, whole_operators, order):
         metrics = metrics + metric
 
         operators_idx_list = operators_idx_list + [idx]*len(drivers)
-        drivers_idx_list = drivers_idx_list + range(len(drivers))
+        drivers_idx_list = drivers_idx_list + np.arange(len(drivers))
 
     if np.sum(empty_idx_list) == 0:
         return -1, -1
     else:
         sorted_idx_list = np.argsort(metrics)
+        # pdb.set_trace()
         for idx in sorted_idx_list:
             if drivers_list[idx].state == 0:
                 return operators_idx_list[idx], drivers_idx_list[idx]
-
         return -1, -1
