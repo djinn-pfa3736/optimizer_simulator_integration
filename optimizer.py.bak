@@ -1,0 +1,188 @@
+import sys
+
+import cv2
+from PIL import Image
+import imagehash
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+from scipy.stats import entropy
+from scipy.spatial.distance import jensenshannon
+
+from sklearn.cluster import OPTICS
+from scipy.cluster.hierarchy import linkage, dendrogram
+
+import glob
+import random
+
+import pickle
+
+import pdb
+
+import simulator
+
+class Optimizer:
+
+    def __init__(self, map_file, demands_distribution_pickle, occuring_distribution_pickle, total_order_num, operator_file_list, simulation_length, simulation_start):
+
+        self.simulation_start = simulation_start
+        self.simulation_length = simulation_length
+
+        with open(demands_distribution_pickle, "rb") as f:
+            self.spatial_temporal_grid = pickle.load(f)
+        self.spatial_temporal_grid = self.spatial_temporal_grid/(np.sum(self.spatial_temporal_grid))
+        _, _, self.interval = self.spatial_temporal_grid.shape
+
+        with open(occuring_distribution_pickle, "rb") as f:
+            self.occuring_distribution = pickle.load(f)
+
+        self.dist_mat = np.zeros((self.interval, self.interval))
+
+        self.world = simulator.World(map_file, demands_distribution_pickle, occuring_distribution_pickle, total_order_num, operator_file_list, simulation_length, simulation_start, self.interval)
+
+        self.operators = []
+        for operator_file in operator_file_list:
+            operator = simulator.Operator(operator_file)
+            self.operators.append(operator)
+
+        self.world.operators = self.operators
+
+        self.order_time_points = np.floor(self.occuring_distribution.sample(total_order_num)) % (self.interval)
+
+    def prepare(self, calc_dist_flag, operator_file_list, max_eps, min_samples, method, pool_len, info_available_flag):
+
+        if calc_dist_flag == 1:
+
+            for i in range(self.interval - 1):
+                for j in range(i + 1, self.interval):
+                    print('*** (%s, %s) ***' % (i, j))
+                    self.dist_mat[i, j] = self.calc_dist(self.spatial_temporal_grid[:,:,i], self.spatial_temporal_grid[:,:,j], i, j, self.interval, method)
+
+            self.dist_mat = self.dist_mat + self.dist_mat.T
+            with open('dist_mat.pickle', "wb") as f:
+                pickle.dump(self.dist_mat, f)
+
+        else:
+            with open('dist_mat.pickle', "rb") as f:
+                self.dist_mat = pickle.load(f)
+
+        self.clustering = OPTICS(metric='precomputed', xi=0.5).fit(self.dist_mat)
+        self.schedule = self.clustering.labels_
+
+        self.gene_pool_list = []
+        for i in range(len(operator_file_list)):
+            gene_pool = []
+            for j in range(pool_len):
+                if info_available_flag == 1:
+                    gene = np.array([])
+                    for k in range(np.max(self.clustering.labels_)+2):
+                        gene_sub = np.array([random.randint(0, 10) for l in range(6)])
+                        gene_sub = gene_sub/np.sum(gene_sub)
+                        gene = np.hstack([gene, gene_sub])
+                    gene_pool.append(gene)
+                else:
+                    gene = np.array([])
+                    for k in range(np.max(self.clustering.labels_)+2):
+                        gene_sub = np.array([random.randint(0, 10) for l in range(3)])
+                        gene_sub = gene_sub/np.sum(gene_sub)
+                        gene_sub = np.hstack([gene_sub, np.array([0, 0, 0])])
+                        gene = np.hstack([gene, gene_sub])
+                    gene_pool.append(gene)
+            self.gene_pool_list.append(gene_pool)
+
+        pdb.set_trace()
+
+    """
+    def evolve(self, info_available_flag, generation_length):
+        for operator in self.world.operators:
+
+    def cross_over(self, gene0, gene1, info_available_flag):
+
+
+    def mutation(self, gene, info_available_flag, mutation_num):
+    """
+
+    def calc_dist(self, dist1, dist2, t_idx1, t_idx2, period, method='kl'):
+
+        rows, cols = dist1.shape
+        delta_t = np.abs(t_idx2 - t_idx1)
+
+        if delta_t < period/2:
+            p = dist2
+            q = dist1
+        else:
+            p = dist1
+            q = dist2
+
+        if method == 'kl':
+            p = p.flatten()
+            q = q.flatten()
+            q += 1/(rows*cols)
+
+            # result = np.sum(np.where(1e-8 < p, p*np.log(p/q), 0))
+            result = entropy(p, qk=q, base=2)
+        elif method == 'js':
+            p = p.flatten()
+            q = q.flatten()
+            q += 1/(rows*cols)
+
+            result = jensenshannon(p, q, base=2)
+        elif method == 'l1':
+            result = np.sum(np.abs(p - q))
+        elif method == 'l2':
+            result = np.sum((p - q)**2)
+        elif method == 'wass':
+            p_sig = np.array([np.array([p[i, j], i, j]) for i in range(rows) for j in range(cols)])
+            q_sig = np.array([np.array([q[i, j], i, j]) for i in range(rows) for j in range(cols)])
+
+            result = cv2.EMD(p_sig, q_sig, cv2.DIST_L2)
+        elif method == 'bhat':
+            result = -np.log(np.sum(np.sqrt(p*q)))
+        elif method == 'phash':
+            max_p = np.max(p)
+            max_q = np.max(q)
+            max_val = np.max([max_p, max_q])
+
+            p_image = Image.fromarray(np.uint8(p/max_val*255))
+            # p_image = Image.fromarray(p/max_val*255, 'L')
+            # p_image = Image.fromarray(p)
+
+            # p_hash = imagehash.average_hash(p_image)
+            p_hash = imagehash.phash(p_image)
+            # p_hash = imagehash.dhash(p_image)
+
+            q_image = Image.fromarray(np.uint8(q/max_val*255))
+            # q_image = Image.fromarray(q/max_val*255, 'L')
+            # q_image = Image.fromarray(q)
+
+            # q_hash = imagehash.average_hash(q_image)
+            q_hash = imagehash.phash(q_image)
+            # q_hash = imagehash.dhash(q_image)
+
+            result = p_hash - q_hash
+
+        else:
+            print('Error: invalid method name is given.')
+            exit(1)
+
+        if result < 0:
+            pdb.set_trace()
+
+        return result
+
+if __name__ == '__main__':
+
+    calc_dist_flag = int(sys.argv[1])
+    map_file = sys.argv[2]
+    demands_distribution_pickle = sys.argv[3]
+    occuring_distribution_pickle = sys.argv[4]
+    total_order_num = int(sys.argv[5])
+    simulation_length = int(sys.argv[6])
+    simulation_start = int(sys.argv[7])
+    method = sys.argv[8]
+
+    operator_file_list = glob.glob('operator_*.json')
+
+    optimizer = Optimizer(map_file, demands_distribution_pickle, occuring_distribution_pickle, total_order_num, operator_file_list, simulation_length, simulation_start)
+    optimizer.prepare(calc_dist_flag, operator_file_list, 200, 2, method, 50, 0)
